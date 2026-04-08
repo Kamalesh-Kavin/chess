@@ -1,10 +1,8 @@
 /**
- * engine.js — Stockfish WASM integration via Web Worker.
- * Uses stockfish.js from CDN.
+ * engine.js — Stockfish integration via Web Worker.
+ * Uses a local copy of stockfish.js (same-origin, no CORS issues).
  */
 const Engine = (function () {
-  const STOCKFISH_CDN = 'https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js';
-
   let worker = null;
   let ready = false;
   let onBestMove = null;
@@ -19,16 +17,9 @@ const Engine = (function () {
   };
 
   function init() {
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       try {
-        // Fetch the Stockfish script and create a blob worker to avoid CORS restrictions
-        const response = await fetch(STOCKFISH_CDN);
-        if (!response.ok) throw new Error('Failed to fetch Stockfish: ' + response.status);
-        const scriptText = await response.text();
-        const blob = new Blob([scriptText], { type: 'application/javascript' });
-        const blobURL = URL.createObjectURL(blob);
-        worker = new Worker(blobURL);
-        URL.revokeObjectURL(blobURL);
+        worker = new Worker('js/stockfish.js');
       } catch (e) {
         reject(new Error('Failed to create Stockfish worker: ' + e.message));
         return;
