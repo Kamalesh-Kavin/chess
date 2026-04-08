@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="top-bar">
+      <h1>Chess</h1>
+      <div id="controls">
+        <select id="difficulty">
+          <option value="1">Beginner</option>
+          <option value="2">Intermediate</option>
+          <option value="3" selected>Advanced</option>
+          <option value="4">Maximum</option>
+        </select>
+        <button id="btn-new" title="New Game">New</button>
+        <button id="btn-undo" title="Undo Move">Undo</button>
+        <button id="btn-flip" title="Flip Board">Flip</button>
+      </div>
+    </div>
+
+    <div id="game-area">
+      <div id="opponent-info" class="player-info">
+        <span class="player-name">Stockfish</span>
+        <span class="player-captures" id="opponent-captures"></span>
+      </div>
+
+      <div id="board-container">
+        <div id="board"></div>
+        <div id="file-labels" class="labels"></div>
+        <div id="rank-labels" class="labels"></div>
+      </div>
+
+      <div id="player-info" class="player-info">
+        <span class="player-name">You</span>
+        <span class="player-captures" id="player-captures"></span>
+      </div>
+    </div>
+
+    <div id="sidebar">
+      <div id="status"></div>
+      <div id="move-list"></div>
+    </div>
+
+    <div id="promotion-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-title">Promote pawn to:</div>
+        <div id="promotion-choices"></div>
+      </div>
+    </div>
+
+    <div id="game-over-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-title" id="game-over-title"></div>
+        <div id="game-over-reason"></div>
+        <button id="btn-play-again">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="thinking-indicator" class="hidden">
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+  </div>
+
+  <script src="js/chess.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
