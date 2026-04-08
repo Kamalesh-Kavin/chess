@@ -19,11 +19,17 @@ const Engine = (function () {
   };
 
   function init() {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
-        worker = new Worker(STOCKFISH_CDN);
+        // Fetch the Stockfish script and create a blob worker to avoid CORS restrictions
+        const response = await fetch(STOCKFISH_CDN);
+        if (!response.ok) throw new Error('Failed to fetch Stockfish: ' + response.status);
+        const scriptText = await response.text();
+        const blob = new Blob([scriptText], { type: 'application/javascript' });
+        const blobURL = URL.createObjectURL(blob);
+        worker = new Worker(blobURL);
+        URL.revokeObjectURL(blobURL);
       } catch (e) {
-        // If direct worker creation fails (CORS), use a blob worker
         reject(new Error('Failed to create Stockfish worker: ' + e.message));
         return;
       }
