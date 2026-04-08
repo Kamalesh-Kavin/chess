@@ -7,14 +7,14 @@
   --text: #e6edf3;
   --text-muted: #7d8590;
   --accent: #58a6ff;
-  --light-sq: #b7c0d8;
-  --dark-sq: #5a6a8a;
-  --light-sq-hl: #c8d87b;
-  --dark-sq-hl: #7b8a3e;
-  --light-sq-check: #e88;
-  --dark-sq-check: #c44;
-  --light-sq-last: #a8b8d0;
-  --dark-sq-last: #4e5e7a;
+  --light-sq: #ecd8b0;
+  --dark-sq: #ae8a68;
+  --light-sq-hl: #f6f67a;
+  --dark-sq-hl: #bbca2b;
+  --light-sq-check: #f7a28a;
+  --dark-sq-check: #ca3431;
+  --light-sq-last: #ced26b;
+  --dark-sq-last: #a9a238;
   --border: #30363d;
   --board-size: min(80vw, 80vh, 560px);
   --sq-size: calc(var(--board-size) / 8);
@@ -75,6 +75,39 @@ html, body {
 #controls select:hover,
 #controls button:hover {
   background: var(--border);
+}
+
+/* Color chooser */
+#color-chooser {
+  display: flex;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.color-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.color-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text);
+}
+
+.color-btn.active {
+  background: var(--bg-tertiary);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 /* Game area */
@@ -143,6 +176,18 @@ html, body {
 
 .square.light.last-move { background: var(--light-sq-last); }
 .square.dark.last-move { background: var(--dark-sq-last); }
+
+/* Last-move piece indicator on the "from" square */
+.last-move-indicator {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  font-size: calc(var(--sq-size) * 0.28);
+  opacity: 0.45;
+  pointer-events: none;
+  line-height: 1;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,0.5));
+}
 
 .square.light.in-check { background: var(--light-sq-check); }
 .square.dark.in-check { background: var(--dark-sq-check); }

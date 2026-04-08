@@ -19,6 +19,8 @@
   const $thinking = document.getElementById('thinking-indicator');
   const $playerCaptures = document.getElementById('player-captures');
   const $opponentCaptures = document.getElementById('opponent-captures');
+  const $btnWhite = document.getElementById('btn-white');
+  const $btnBlack = document.getElementById('btn-black');
 
   // --- Game state ---
   let gameState = null;
@@ -26,6 +28,7 @@
   let selected = -1;
   let highlights = [];
   let lastMove = null;
+  let lastMovePiece = null; // Unicode of the piece that last moved
   let flipped = false;
   let playerColor = Chess.WHITE;
   let engineThinking = false;
@@ -61,6 +64,7 @@
     selected = -1;
     highlights = [];
     lastMove = null;
+    lastMovePiece = null;
     capturedByPlayer = [];
     capturedByEngine = [];
     engineThinking = false;
@@ -68,11 +72,15 @@
     $promoModal.classList.add('hidden');
     $thinking.classList.add('hidden');
 
+    // Auto-flip board to match player color
+    flipped = playerColor === Chess.BLACK;
+
     if (engineReady) {
       Engine.newGame();
       Engine.setDifficulty(getDifficulty());
     }
 
+    updateColorButtons();
     updateAll();
 
     // If player is black, engine moves first
@@ -135,6 +143,10 @@
       let html = '';
       if (piece) {
         html = '<span class="piece">' + Chess.PIECE_UNICODE[piece.color + piece.type] + '</span>';
+      }
+      // Last-move piece indicator on the "from" square
+      if (lastMove && lastMovePiece && dispSq === lastMove.from && !piece) {
+        html += '<span class="last-move-indicator">' + lastMovePiece + '</span>';
       }
       // Move indicators
       if (selected >= 0 && highlights.includes(dispSq)) {
@@ -260,6 +272,7 @@
   }
 
   function executeMove(from, to, promotion) {
+    const movedPiece = gameState.board[from];
     const result = Chess.makeMove(gameState, from, to, promotion);
     if (!result) return;
 
@@ -272,6 +285,7 @@
     history.push({ state: gameState, move: result.move, san, captured: result.captured });
     gameState = result.state;
     lastMove = result.move;
+    lastMovePiece = movedPiece ? Chess.PIECE_UNICODE[movedPiece.color + (promotion || movedPiece.type)] : null;
     clearSelection();
     updateAll();
 
@@ -300,6 +314,7 @@
     const to = Chess.fromAlg(bestUci.substring(2, 4));
     const promo = bestUci.length > 4 ? bestUci[4] : null;
 
+    const movedPiece = gameState.board[from];
     const result = Chess.makeMove(gameState, from, to, promo);
     if (!result) { console.error('Engine returned illegal move:', bestUci); return; }
 
@@ -309,6 +324,7 @@
     history.push({ state: gameState, move: result.move, san, captured: result.captured });
     gameState = result.state;
     lastMove = result.move;
+    lastMovePiece = movedPiece ? Chess.PIECE_UNICODE[movedPiece.color + (promo || movedPiece.type)] : null;
     updateAll();
   }
 
@@ -330,6 +346,7 @@
       }
     }
     lastMove = history.length > 0 ? history[history.length - 1].move : null;
+    lastMovePiece = null; // Reset — we don't track piece through undo chain
     clearSelection();
     updateAll();
   }
@@ -502,12 +519,36 @@
       if (engineReady) Engine.setDifficulty(getDifficulty());
     });
 
+    // Color chooser
+    $btnWhite.addEventListener('click', () => {
+      if (playerColor === Chess.WHITE) return;
+      playerColor = Chess.WHITE;
+      updateColorButtons();
+      newGame();
+    });
+    $btnBlack.addEventListener('click', () => {
+      if (playerColor === Chess.BLACK) return;
+      playerColor = Chess.BLACK;
+      updateColorButtons();
+      newGame();
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
       if (e.key === 'n' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); newGame(); }
       if (e.key === 'f' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flipped = !flipped; render(); }
     });
+  }
+
+  function updateColorButtons() {
+    $btnWhite.classList.toggle('active', playerColor === Chess.WHITE);
+    $btnBlack.classList.toggle('active', playerColor === Chess.BLACK);
+    // Update player labels
+    const $playerName = document.querySelector('#player-info .player-name');
+    const $opponentName = document.querySelector('#opponent-info .player-name');
+    if ($playerName) $playerName.textContent = 'You (' + (playerColor === Chess.WHITE ? 'White' : 'Black') + ')';
+    if ($opponentName) $opponentName.textContent = 'Stockfish (' + (playerColor === Chess.WHITE ? 'Black' : 'White') + ')';
   }
 
   // --- Boot ---
