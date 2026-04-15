@@ -1,7 +1,7 @@
 /**
  * ui.js — Board rendering, interaction, game flow controller.
- * Modes: "vs-engine" (standard play) and "handoff" (play both sides, delegate to Stockfish).
- * Post-game analysis with move classification.
+ * Modes: "vs-engine", "handoff", "learn" (tutorials).
+ * Features: live move coach, engine thinking panel, hint arrows, post-game analysis.
  */
 (function () {
   // --- DOM refs ---
@@ -12,6 +12,7 @@
   const $btnNew = document.getElementById('btn-new');
   const $btnUndo = document.getElementById('btn-undo');
   const $btnFlip = document.getElementById('btn-flip');
+  const $btnHint = document.getElementById('btn-hint');
   const $promoModal = document.getElementById('promotion-modal');
   const $promoChoices = document.getElementById('promotion-choices');
   const $gameOverModal = document.getElementById('game-over-modal');
@@ -38,6 +39,45 @@
   const $evalText = document.getElementById('eval-text');
   const $analysisSummary = document.getElementById('analysis-summary');
   const $colorChooser = document.getElementById('color-chooser');
+  const $arrowSvg = document.getElementById('arrow-svg');
+
+  // Coach panel refs
+  const $coachPanel = document.getElementById('coach-panel');
+  const $coachToggle = document.getElementById('coach-toggle');
+  const $coachContent = document.getElementById('coach-content');
+  const $coachIcon = document.getElementById('coach-icon');
+  const $coachTitleText = document.getElementById('coach-title-text');
+  const $coachDetail = document.getElementById('coach-detail');
+
+  // Suggestion panel refs
+  const $suggestionPanel = document.getElementById('suggestion-panel');
+  const $suggestionMove = document.getElementById('suggestion-move');
+  const $suggestionReason = document.getElementById('suggestion-reason');
+
+  // Thinking panel refs
+  const $thinkingPanel = document.getElementById('thinking-panel');
+  const $thinkingEval = document.getElementById('thinking-eval');
+  const $thinkingDepth = document.getElementById('thinking-depth');
+  const $thinkingPV = document.getElementById('thinking-pv');
+  const $thinkingNPS = document.getElementById('thinking-nps');
+
+  // Tutorial refs
+  const $gameLayout = document.getElementById('game-layout');
+  const $tutorialLayout = document.getElementById('tutorial-layout');
+  const $tutorialBrowser = document.getElementById('tutorial-browser');
+  const $tutorialCategories = document.getElementById('tutorial-categories');
+  const $tutorialLesson = document.getElementById('tutorial-lesson');
+  const $btnTutorialBack = document.getElementById('btn-tutorial-back');
+  const $tutorialLessonTitle = document.getElementById('tutorial-lesson-title');
+  const $tutorialStepCounter = document.getElementById('tutorial-step-counter');
+  const $tutorialBoard = document.getElementById('tutorial-board');
+  const $tutorialArrowSvg = document.getElementById('tutorial-arrow-svg');
+  const $tutorialText = document.getElementById('tutorial-text');
+  const $tutorialHint = document.getElementById('tutorial-hint');
+  const $tutorialFeedback = document.getElementById('tutorial-feedback');
+  const $btnTutorialPrev = document.getElementById('btn-tutorial-prev');
+  const $btnTutorialNext = document.getElementById('btn-tutorial-next');
+  const $btnTutorialHint = document.getElementById('btn-tutorial-hint');
 
   // --- Game state ---
   let gameState = null;
@@ -54,20 +94,39 @@
   let engineReady = false;
 
   // --- Mode state ---
-  let gameMode = 'vs-engine'; // 'vs-engine' | 'handoff'
-  let handoffColor = null;    // null = human plays both, 'w' or 'b' = engine plays that color
+  let gameMode = 'vs-engine'; // 'vs-engine' | 'handoff' | 'learn'
+  let handoffColor = null;
   let analysisRunning = false;
-  let analysisResults = [];   // per-move analysis: { eval, classification, bestMove }
+  let analysisResults = [];
+
+  // --- Coach state ---
+  let coachEnabled = true;
+  let suggestionSquares = [];      // squares to show best-move dots on
+
+  // --- Hint state ---
+  let hintPending = false;
 
   // --- Drag state ---
   let dragFrom = -1;
   let dragGhost = null;
 
-  // --- Init ---
+  // --- Tutorial state ---
+  let tutorialLesson = null;       // current lesson object
+  let tutorialStepIdx = 0;         // current step index
+  let tutorialGameState = null;    // Chess state for tutorial board
+  let tutorialSelected = -1;
+  let tutorialHighlights = [];
+  let tutorialPuzzleSolved = false;
+
+  // ===================== INIT =====================
+
   async function init() {
     createBoard();
+    createTutorialBoard();
     bindControls();
     createDragGhost();
+    initArrowDefs($arrowSvg, 'arrowhead', 'rgba(88,166,255,0.6)');
+    initArrowDefs($tutorialArrowSvg, 'arrowhead-tutorial', 'rgba(255,170,50,0.6)');
 
     $status.textContent = 'Loading engine...';
     try {
@@ -93,6 +152,7 @@
     engineThinking = false;
     handoffColor = null;
     analysisResults = [];
+    hintPending = false;
     $gameOverModal.classList.add('hidden');
     $promoModal.classList.add('hidden');
     $thinking.classList.add('hidden');
@@ -100,6 +160,8 @@
     $analysisSummary.innerHTML = '';
     $analysisProgress.classList.remove('visible');
     $evalBarContainer.classList.remove('visible');
+    clearArrows($arrowSvg);
+    resetCoachPanel();
 
     if (gameMode === 'vs-engine') {
       flipped = playerColor === Chess.BLACK;
@@ -121,13 +183,18 @@
     if (gameMode === 'vs-engine' && playerColor === Chess.BLACK && engineReady) {
       engineMove();
     }
+    // If player is white, suggest best opening move
+    if (gameMode === 'vs-engine' && playerColor === Chess.WHITE && engineReady) {
+      runSuggestion();
+    }
   }
 
   function getDifficulty() {
     return parseInt($difficulty.value) || 3;
   }
 
-  // --- Board creation ---
+  // ===================== BOARD CREATION =====================
+
   function createBoard() {
     $board.innerHTML = '';
     for (let i = 0; i < 64; i++) {
@@ -144,13 +211,94 @@
     document.addEventListener('touchend', onTouchEnd);
   }
 
+  function createTutorialBoard() {
+    $tutorialBoard.innerHTML = '';
+    for (let i = 0; i < 64; i++) {
+      const div = document.createElement('div');
+      div.className = 'square';
+      div.dataset.sq = i;
+      $tutorialBoard.appendChild(div);
+    }
+    $tutorialBoard.addEventListener('click', onTutorialBoardClick);
+  }
+
   function createDragGhost() {
     dragGhost = document.createElement('div');
     dragGhost.id = 'drag-ghost';
     document.body.appendChild(dragGhost);
   }
 
-  // --- Render ---
+  // ===================== ARROW DRAWING =====================
+
+  function initArrowDefs(svgEl, markerId, color) {
+    // Create SVG defs with arrowhead marker
+    const ns = 'http://www.w3.org/2000/svg';
+    const defs = document.createElementNS(ns, 'defs');
+    const marker = document.createElementNS(ns, 'marker');
+    marker.setAttribute('id', markerId);
+    marker.setAttribute('markerWidth', '10');
+    marker.setAttribute('markerHeight', '7');
+    marker.setAttribute('refX', '10');
+    marker.setAttribute('refY', '3.5');
+    marker.setAttribute('orient', 'auto');
+    marker.setAttribute('markerUnits', 'strokeWidth');
+    const polygon = document.createElementNS(ns, 'polygon');
+    polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+    polygon.setAttribute('fill', color);
+    marker.appendChild(polygon);
+    defs.appendChild(marker);
+    svgEl.appendChild(defs);
+  }
+
+  /**
+   * Draw an arrow on the SVG overlay.
+   * @param {SVGElement} svgEl - the SVG overlay element
+   * @param {string} fromSq - algebraic square (e.g. 'e2')
+   * @param {string} toSq - algebraic square (e.g. 'e4')
+   * @param {string} cssClass - CSS class(es) for the arrow line (space-separated)
+   * @param {boolean} isFlipped - whether the board is flipped
+   * @param {string} [markerId] - SVG marker ID for arrowhead (e.g. 'arrowhead-pv')
+   */
+  function drawArrow(svgEl, fromSq, toSq, cssClass, isFlipped, markerId) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const from = squareToCoords(fromSq, isFlipped);
+    const to = squareToCoords(toSq, isFlipped);
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', from.x);
+    line.setAttribute('y1', from.y);
+    line.setAttribute('x2', to.x);
+    line.setAttribute('y2', to.y);
+    // classList.add doesn't accept space-separated strings; split them
+    cssClass.split(' ').forEach(function(cls) { if (cls) line.classList.add(cls); });
+    if (markerId) {
+      line.setAttribute('marker-end', 'url(#' + markerId + ')');
+    }
+    svgEl.appendChild(line);
+  }
+
+  function squareToCoords(algSq, isFlipped) {
+    const file = algSq.charCodeAt(0) - 97; // 0-7
+    const rank = parseInt(algSq[1]) - 1;    // 0-7
+    let col = isFlipped ? 7 - file : file;
+    let row = isFlipped ? rank : 7 - rank;
+    return {
+      x: col * 12.5 + 6.25,  // center of square
+      y: row * 12.5 + 6.25,
+    };
+  }
+
+  function clearArrows(svgEl) {
+    // Remove all children except <defs>
+    const children = Array.from(svgEl.children);
+    for (const child of children) {
+      if (child.tagName !== 'defs') {
+        svgEl.removeChild(child);
+      }
+    }
+  }
+
+  // ===================== RENDER =====================
+
   function render() {
     const squares = $board.children;
     const checkSq = Chess.isInCheck(gameState.board, gameState.turn)
@@ -163,7 +311,6 @@
       const piece = gameState.board[dispSq];
       const sq = squares[i];
 
-      // Base classes
       let cls = 'square ' + (isLight ? 'light' : 'dark');
       if (dispSq === selected) cls += ' selected';
       if (highlights.includes(dispSq)) cls += ' highlight';
@@ -173,17 +320,14 @@
       sq.className = cls;
       sq.dataset.sq = dispSq;
 
-      // Build content
       let html = '';
 
       // Coordinate labels
       const fileIdx = flipped ? 7 - c : c;
       const rankIdx = flipped ? r : 7 - r;
-      // File label on bottom row
       if (i >= 56) {
         html += '<span class="coord-label coord-file">' + 'abcdefgh'[fileIdx] + '</span>';
       }
-      // Rank label on left column
       if (i % 8 === 0) {
         html += '<span class="coord-label coord-rank">' + (rankIdx + 1) + '</span>';
       }
@@ -194,18 +338,18 @@
         html += '<span class="piece ' + pieceClass + '">' + Chess.PIECE_UNICODE[piece.color + piece.type] + '</span>';
       }
 
-      // Last-move piece indicator on the "from" square
+      // Last-move piece indicator on "from" square
       if (lastMove && lastMovePiece && dispSq === lastMove.from && !piece) {
         html += '<span class="last-move-indicator">' + lastMovePiece + '</span>';
       }
 
-      // Analysis marker on the "to" square of last move
+      // Analysis marker on "to" square
       if (analysisResults.length > 0 && lastMove) {
         const moveIdx = history.length - 1;
         if (moveIdx >= 0 && moveIdx < analysisResults.length && dispSq === lastMove.to) {
-          const cls = analysisResults[moveIdx] ? analysisResults[moveIdx].classification : null;
-          if (cls && cls !== 'best' && cls !== 'good') {
-            html += '<div class="analysis-marker ' + cls + '"></div>';
+          const clsName = analysisResults[moveIdx] ? analysisResults[moveIdx].classification : null;
+          if (clsName && clsName !== 'best' && clsName !== 'good') {
+            html += '<div class="analysis-marker ' + clsName + '"></div>';
           }
         }
       }
@@ -218,6 +362,16 @@
           html += '<div class="move-dot"></div>';
         }
       }
+
+      // Best-move suggestion dots (from coach)
+      if (suggestionSquares.includes(dispSq)) {
+        if (gameState.board[dispSq] != null) {
+          html += '<div class="suggest-ring"></div>';
+        } else {
+          html += '<div class="suggest-dot"></div>';
+        }
+      }
+
       sq.innerHTML = html;
     }
 
@@ -256,7 +410,6 @@
       if (history[i].enginePlayed) wCls += ' engine-move';
       w.className = wCls;
       w.textContent = history[i].san;
-      // Add analysis annotation dot
       if (analysisResults[i] && analysisResults[i].classification) {
         const dot = document.createElement('span');
         dot.className = 'move-annotation ' + analysisResults[i].classification;
@@ -288,20 +441,16 @@
   }
 
   function goToMove(idx) {
-    // Navigate to a specific position in history
     if (idx < 0 || idx >= history.length) return;
-    // We can't truly go back in time without replaying, so just show eval info
-    // For now, highlight the move and show its eval
     if (analysisResults[idx]) {
       const ar = analysisResults[idx];
       showEvalBar(ar.eval, history[idx].state.turn);
     }
   }
 
-  function showEvalBar(evalScore, turn) {
+  function showEvalBar(evalScore) {
     if (evalScore == null) return;
     $evalBarContainer.classList.add('visible');
-    // Score is from white's perspective
     const clamped = Math.max(-10, Math.min(10, evalScore));
     const pct = 50 + (clamped / 10) * 50;
     $evalBar.style.width = pct + '%';
@@ -323,8 +472,7 @@
       } else {
         $status.textContent = '';
       }
-    } else {
-      // Handoff mode
+    } else if (gameMode === 'handoff') {
       const turnLabel = gameState.turn === Chess.WHITE ? 'White' : 'Black';
       if (handoffColor === gameState.turn) {
         $status.textContent = 'Stockfish is playing as ' + turnLabel + '...';
@@ -340,7 +488,8 @@
     updateStatus();
   }
 
-  // --- Interaction ---
+  // ===================== INTERACTION =====================
+
   function getSquareFromEvent(e) {
     const target = e.target.closest('.square');
     if (!target) return -1;
@@ -353,21 +502,21 @@
     if (gameMode === 'vs-engine') {
       return gameState.turn === playerColor;
     }
-    // Handoff mode: can interact if engine is NOT controlling current turn
-    return handoffColor !== gameState.turn;
+    if (gameMode === 'handoff') {
+      return handoffColor !== gameState.turn;
+    }
+    return false; // learn mode — no interaction on main board
   }
 
   function selectSquare(sq) {
     if (sq < 0) { clearSelection(); return; }
     const piece = gameState.board[sq];
 
-    // If we have a selection and clicked a valid target, try to move
     if (selected >= 0 && highlights.includes(sq)) {
       tryMove(selected, sq);
       return;
     }
 
-    // In handoff mode, can pick up any piece of the current turn's color
     const allowedColor = (gameMode === 'handoff') ? gameState.turn : playerColor;
     if (piece && piece.color === allowedColor) {
       selected = sq;
@@ -395,14 +544,14 @@
     executeMove(from, to, null, false);
   }
 
-  function executeMove(from, to, promotion, isEnginePlayed) {
+  async function executeMove(from, to, promotion, isEnginePlayed) {
     const movedPiece = gameState.board[from];
+    const prevFEN = Chess.toFEN(gameState); // FEN before move — for coaching
     const result = Chess.makeMove(gameState, from, to, promotion);
     if (!result) return;
 
     const san = Chess.toSAN(gameState, result.move);
     if (result.captured) {
-      // Track captures by which color made the capture
       if (gameState.turn === Chess.WHITE) {
         capturedByWhite.push(result.captured);
       } else {
@@ -421,36 +570,231 @@
     lastMove = result.move;
     lastMovePiece = movedPiece ? Chess.PIECE_UNICODE[movedPiece.color + (promotion || movedPiece.type)] : null;
     clearSelection();
+    // Only clear coach suggestions when the player moves, not when Stockfish moves
+    if (!isEnginePlayed) {
+      clearArrows($arrowSvg);
+      hideSuggestion();
+    }
     updateAll();
 
     // Check if game over
     const status = Chess.getStatus(gameState);
     if (status.over) return;
 
+    // Live coaching — evaluate the player's move BEFORE engine responds
+    // (must await so both don't send 'go' commands to the same worker concurrently)
+    if (!isEnginePlayed && coachEnabled && gameMode === 'vs-engine' && engineReady) {
+      await runCoach(prevFEN, from, to, promotion, movedPiece, result);
+    }
+
     if (gameMode === 'vs-engine') {
-      // Engine plays the other color
       if (gameState.turn !== playerColor && engineReady) {
         engineMove();
       }
-    } else {
-      // Handoff mode: if engine controls the next turn's color, let it play
+    } else if (gameMode === 'handoff') {
       if (handoffColor === gameState.turn && engineReady) {
         setTimeout(() => engineMoveHandoff(), 300);
       }
     }
   }
 
-  // --- Engine move (vs-engine mode) ---
+  // ===================== LIVE COACH =====================
+
+  async function runCoach(prevFEN, from, to, promotion, movedPiece, result) {
+    const playerMoveUCI = Chess.toAlg(from) + Chess.toAlg(to) + (promotion || '');
+    const preMoveState = Chess.parseFEN(prevFEN); // board state before the move
+
+    // Quick eval the position BEFORE the move to get best move + eval
+    const evalResult = await Engine.quickEval(prevFEN, 12);
+    if (!evalResult || !evalResult.info) return;
+
+    // Restore difficulty after coach eval
+    if (engineReady) Engine.setDifficulty(getDifficulty());
+
+    const bestMoveUCI = evalResult.bestMove;
+    const evalBefore = evalResult.info.score || 0;
+    const evalBeforeNorm = movedPiece.color === Chess.WHITE ? evalBefore : -evalBefore;
+
+    // We also need eval AFTER the move — use the info from multi-PV or do a quick single eval
+    // For simplicity, compare with best move: if player played best move, no loss
+    const isBestMove = playerMoveUCI === bestMoveUCI;
+
+    // Estimate eval loss from multi-PV: PV1 is best, check if player's move matches any PV
+    let evalAfterNorm = evalBeforeNorm;
+    let classification = 'best';
+    let pvLine = evalResult.info.pv || [];
+
+    if (!isBestMove) {
+      // The player didn't play the best move — estimate the loss
+      // Check PV2 and PV3 from multi-PV
+      const allLines = evalResult.allLines || {};
+      let playerLineEval = null;
+
+      for (const idx in allLines) {
+        const lineInfo = allLines[idx];
+        if (lineInfo.pv && lineInfo.pv[0] === playerMoveUCI) {
+          playerLineEval = lineInfo.score || 0;
+          playerLineEval = movedPiece.color === Chess.WHITE ? playerLineEval : -playerLineEval;
+          break;
+        }
+      }
+
+      // If we found the player's move in multi-PV lines, use that eval
+      // Otherwise estimate a larger loss
+      const bestEval = movedPiece.color === Chess.WHITE ? evalBefore : -evalBefore;
+      if (playerLineEval !== null) {
+        evalAfterNorm = playerLineEval;
+      } else {
+        // Player's move wasn't in top 3 — likely a bigger mistake. Do a quick single eval.
+        evalAfterNorm = bestEval - 0.8; // rough estimate — actual eval would need another engine call
+      }
+
+      const absLoss = bestEval - evalAfterNorm;
+      if (absLoss <= -0.5) {
+        classification = 'brilliant';
+      } else if (absLoss <= 0) {
+        classification = 'best';
+      } else if (absLoss < 0.2) {
+        classification = 'good';
+      } else if (absLoss < 0.5) {
+        classification = 'inaccuracy';
+      } else if (absLoss < 1.5) {
+        classification = 'mistake';
+      } else {
+        classification = 'blunder';
+      }
+    }
+
+    const coachMsg = Tutorials.coachMessage({
+      classification,
+      playerMove: playerMoveUCI,
+      bestMove: bestMoveUCI,
+      evalBefore: evalBeforeNorm,
+      evalAfter: evalAfterNorm,
+      pv: pvLine,
+      piece: movedPiece,
+      captured: !!result.captured,
+      wasCheck: Chess.isInCheck(gameState.board, gameState.turn),
+      moverColor: movedPiece.color,
+      boardState: preMoveState,
+    });
+
+    showCoachFeedback(classification, coachMsg, bestMoveUCI, isBestMove, pvLine, preMoveState);
+  }
+
+  function showCoachFeedback(classification, msg, bestMoveUCI, isBestMove, pvMoves, boardState) {
+    // Icon symbols per classification
+    const icons = {
+      brilliant: '!!',
+      best: '!',
+      good: '=',
+      inaccuracy: '?!',
+      mistake: '?',
+      blunder: '??',
+    };
+
+    $coachIcon.textContent = icons[classification] || '?';
+    $coachIcon.className = 'coach-icon ' + classification;
+    $coachTitleText.textContent = msg.title;
+
+    // Build detail text — include what the best move was if they missed it
+    let detail = (msg.message || '') + (msg.detail ? ' ' + msg.detail : '');
+    if (!isBestMove && bestMoveUCI && boardState) {
+      const bestReadable = Tutorials.describeBestMove(bestMoveUCI, boardState);
+      const reason = Tutorials.explainBestMove(bestMoveUCI, boardState);
+      detail += ' Best was ' + bestReadable + '.';
+      if (reason) detail += ' (' + reason + ')';
+    }
+    $coachDetail.textContent = detail;
+  }
+
+  function resetCoachPanel() {
+    $coachIcon.textContent = '';
+    $coachIcon.className = 'coach-icon';
+    $coachTitleText.textContent = 'Play a move to get feedback';
+    $coachDetail.textContent = '';
+    hideSuggestion();
+  }
+
+  // ===================== SUGGESTION (auto-hint for current position) =====================
+
+  function showSuggestion(bestUci) {
+    if (!bestUci || bestUci.length < 4) { hideSuggestion(); return; }
+
+    const fen = Chess.toFEN(gameState);
+    const currentState = Chess.parseFEN(fen);
+    const fromSq = Chess.fromAlg(bestUci.substring(0, 2));
+    const toSq = Chess.fromAlg(bestUci.substring(2, 4));
+    const piece = currentState.board[fromSq];
+
+    // Readable move name + reason
+    const moveText = Tutorials.describeBestMove(bestUci, currentState);
+    const reason = Tutorials.explainBestMove(bestUci, currentState);
+
+    $suggestionMove.textContent = moveText;
+    $suggestionReason.textContent = reason || '';
+    $suggestionPanel.classList.remove('hidden');
+
+    // Dots on the board
+    suggestionSquares = [];
+    if (piece && piece.type === 'p' && Math.abs(Chess.row(fromSq) - Chess.row(toSq)) === 2) {
+      const midRow = (Chess.row(fromSq) + Chess.row(toSq)) / 2;
+      const midSq = Chess.sq(midRow, Chess.col(fromSq));
+      suggestionSquares = [fromSq, midSq, toSq];
+    } else {
+      suggestionSquares = [fromSq, toSq];
+    }
+    render();
+  }
+
+  function hideSuggestion() {
+    $suggestionPanel.classList.add('hidden');
+    $suggestionMove.textContent = '';
+    $suggestionReason.textContent = '';
+    suggestionSquares = [];
+  }
+
+  async function runSuggestion() {
+    if (!engineReady || engineThinking || !coachEnabled) return;
+    if (gameMode !== 'vs-engine') return;
+    if (gameState.turn !== playerColor) return;
+    if (Chess.getStatus(gameState).over) return;
+
+    const fen = Chess.toFEN(gameState);
+    const result = await Engine.getHint(fen);
+    if (engineReady) Engine.setDifficulty(getDifficulty());
+
+    if (!result || !result.bestMove) { hideSuggestion(); return; }
+
+    // Only show if it's still the player's turn (game state may have changed during await)
+    if (gameState.turn !== playerColor) return;
+
+    showSuggestion(result.bestMove);
+  }
+
+  // ===================== ENGINE MOVE (VS-ENGINE) =====================
+
   async function engineMove() {
     engineThinking = true;
     $thinking.classList.remove('hidden');
+    $thinkingPanel.classList.remove('hidden');
     updateStatus();
 
+    // Clear stale thinking panel data from previous engine move
+    $thinkingPV._lastPV = [];
+    $thinkingEval._lastScore = 0;
+    $thinkingEval._lastScoreType = 'cp';
+    $thinkingEval._lastMate = null;
+
+    // Use streaming info callback for thinking panel
     const fen = Chess.toFEN(gameState);
-    const bestUci = await Engine.getBestMove(fen, getDifficulty());
+    const preEngineState = Chess.parseFEN(fen); // save for readable coach text
+    const bestUci = await Engine.getBestMoveWithInfo(fen, getDifficulty(), onEngineThinkingInfo);
 
     engineThinking = false;
     $thinking.classList.add('hidden');
+    $thinkingPanel.classList.add('hidden');
+    Engine.clearInfoCallback();
 
     if (!bestUci) return;
 
@@ -481,12 +825,50 @@
     gameState = result.state;
     lastMove = result.move;
     lastMovePiece = movedPiece ? Chess.PIECE_UNICODE[movedPiece.color + (promo || movedPiece.type)] : null;
+    clearArrows($arrowSvg);
     updateAll();
+
+    // Coach panel is NOT overwritten here — your feedback stays visible
+    // through Stockfish's turn until your next move.
+
+    // Auto-suggest the best move for the player's upcoming turn
+    runSuggestion();
   }
 
-  // --- Engine move (handoff mode) ---
+  function onEngineThinkingInfo(info) {
+    // Update thinking panel with streaming data
+    if (info.scoreType === 'mate') {
+      $thinkingEval.textContent = 'M' + Math.abs(info.mate);
+      $thinkingEval._lastScore = info.mate > 0 ? 100 : -100;
+      $thinkingEval._lastScoreType = 'mate';
+      $thinkingEval._lastMate = info.mate;
+    } else if (info.score !== undefined) {
+      const sign = info.score > 0 ? '+' : '';
+      $thinkingEval.textContent = sign + info.score.toFixed(1);
+      $thinkingEval._lastScore = info.score;
+      $thinkingEval._lastScoreType = 'cp';
+      $thinkingEval._lastMate = null;
+    }
+
+    if (info.depth) {
+      $thinkingDepth.textContent = info.depth + (info.seldepth ? '/' + info.seldepth : '');
+    }
+
+    if (info.pv && info.pv.length > 0) {
+      $thinkingPV.textContent = info.pv.slice(0, 6).join(' ');
+      $thinkingPV._lastPV = info.pv;
+    }
+
+    if (info.nps) {
+      const kNps = Math.round(info.nps / 1000);
+      $thinkingNPS.textContent = kNps + 'k n/s';
+    }
+  }
+
+  // ===================== ENGINE MOVE (HANDOFF) =====================
+
   async function engineMoveHandoff() {
-    if (handoffColor !== gameState.turn) return; // user took back control
+    if (handoffColor !== gameState.turn) return;
     if (Chess.getStatus(gameState).over) return;
 
     engineThinking = true;
@@ -500,10 +882,6 @@
     $thinking.classList.add('hidden');
 
     if (!bestUci) return;
-    // Check again — user might have stopped handoff while we were thinking
-    if (handoffColor !== history.length > 0 ? gameState.turn : null) {
-      // Re-check: if handoff is still active for this color
-    }
 
     const from = Chess.fromAlg(bestUci.substring(0, 2));
     const to = Chess.fromAlg(bestUci.substring(2, 4));
@@ -512,24 +890,52 @@
     executeMove(from, to, promo, true);
   }
 
-  // --- Undo ---
+  // ===================== HINT SYSTEM =====================
+
+  async function showHint() {
+    if (!engineReady || engineThinking || hintPending) return;
+    if (gameMode !== 'vs-engine' || gameState.turn !== playerColor) return;
+    if (Chess.getStatus(gameState).over) return;
+
+    hintPending = true;
+    $btnHint.disabled = true;
+    $btnHint.textContent = '...';
+
+    const fen = Chess.toFEN(gameState);
+    const result = await Engine.getHint(fen);
+
+    // Restore difficulty
+    if (engineReady) Engine.setDifficulty(getDifficulty());
+
+    hintPending = false;
+    $btnHint.disabled = false;
+    $btnHint.textContent = 'Hint';
+
+    if (!result || !result.bestMove) return;
+
+    // Delegate to showSuggestion — single source of truth for dots + panel
+    showSuggestion(result.bestMove);
+  }
+
+  // ===================== UNDO =====================
+
   function undo() {
     if (engineThinking) return;
     if (history.length === 0) return;
 
     if (gameMode === 'vs-engine') {
-      // Undo two moves (player + engine) so it's the player's turn again
       const count = gameState.turn === playerColor ? 2 : 1;
       for (let i = 0; i < count && history.length > 0; i++) {
         undoOne();
       }
     } else {
-      // Handoff mode: undo one move
       undoOne();
     }
     lastMove = history.length > 0 ? history[history.length - 1].move : null;
     lastMovePiece = null;
     clearSelection();
+    clearArrows($arrowSvg);
+    resetCoachPanel();
     updateAll();
   }
 
@@ -544,13 +950,13 @@
         capturedByBlack.pop();
       }
     }
-    // Trim analysis results if needed
     if (analysisResults.length > history.length) {
       analysisResults.length = history.length;
     }
   }
 
-  // --- Promotion modal ---
+  // ===================== PROMOTION MODAL =====================
+
   function showPromotionModal(from, to, color) {
     $promoChoices.innerHTML = '';
     for (const type of ['q', 'r', 'b', 'n']) {
@@ -566,7 +972,8 @@
     $promoModal.classList.remove('hidden');
   }
 
-  // --- Game over ---
+  // ===================== GAME OVER =====================
+
   function showGameOver(status) {
     let title = '';
     if (status.result === 'draw') {
@@ -590,7 +997,8 @@
     $gameOverModal.classList.remove('hidden');
   }
 
-  // --- Drag and drop ---
+  // ===================== DRAG AND DROP =====================
+
   function onMouseDown(e) {
     if (e.button !== 0) return;
     if (!canInteract()) return;
@@ -600,7 +1008,6 @@
     const piece = gameState.board[sq];
     const allowedColor = (gameMode === 'handoff') ? gameState.turn : playerColor;
 
-    // If clicking a move target with existing selection
     if (selected >= 0 && highlights.includes(sq)) {
       tryMove(selected, sq);
       return;
@@ -612,7 +1019,6 @@
       return;
     }
 
-    // Start drag
     selected = sq;
     highlights = Chess.legalMovesFrom(gameState, sq).map(m => m.to);
     dragFrom = sq;
@@ -720,20 +1126,38 @@
 
   function setMode(mode) {
     gameMode = mode;
-    // Update mode buttons
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.mode === mode);
     });
-    newGame();
+
+    if (mode === 'learn') {
+      $gameLayout.classList.add('hidden');
+      $tutorialLayout.classList.remove('hidden');
+      renderTutorialBrowser();
+    } else {
+      $gameLayout.classList.remove('hidden');
+      $tutorialLayout.classList.add('hidden');
+      newGame();
+    }
   }
 
   function updateModeUI() {
-    // Show/hide color chooser in vs-engine mode
+    // Show/hide controls per mode
     $colorChooser.style.display = gameMode === 'vs-engine' ? 'flex' : 'none';
-    // Show/hide handoff controls
     $handoffControls.classList.toggle('visible', gameMode === 'handoff');
-    // Always show analysis panel
     $analysisPanel.classList.add('visible');
+
+    // Show/hide coach panel + hint in game modes
+    const inGameMode = gameMode === 'vs-engine' || gameMode === 'handoff';
+    $coachPanel.style.display = gameMode === 'vs-engine' ? 'block' : 'none';
+    $btnHint.style.display = gameMode === 'vs-engine' ? 'inline-block' : 'none';
+
+    // Game controls visibility
+    const gameControls = [$btnNew, $btnUndo, $btnFlip, $difficulty];
+    gameControls.forEach(el => {
+      el.style.display = (gameMode === 'learn') ? 'none' : '';
+    });
+    $colorChooser.style.display = (gameMode === 'vs-engine') ? 'flex' : 'none';
   }
 
   function updateHandoffUI() {
@@ -756,7 +1180,6 @@
     updateHandoffUI();
     updateStatus();
 
-    // If it's currently this color's turn, start engine immediately
     if (gameState.turn === handoffColor && !Chess.getStatus(gameState).over) {
       engineMoveHandoff();
     }
@@ -783,8 +1206,8 @@
     $analysisSummary.classList.remove('visible');
     $evalBarContainer.classList.add('visible');
 
-    const depth = 14; // analysis depth
-    let prevEval = 0; // starting eval (equal position)
+    const depth = 14;
+    let prevEval = 0;
 
     for (let i = 0; i < history.length; i++) {
       if (!analysisRunning) break;
@@ -793,7 +1216,6 @@
       $progressBar.style.width = pct + '%';
       $progressText.textContent = 'Analyzing move ' + (i + 1) + ' of ' + history.length + '...';
 
-      // Evaluate the position AFTER this move was played
       const fenAfter = Chess.toFEN(
         i + 1 < history.length ? history[i + 1].state : gameState
       );
@@ -807,29 +1229,19 @@
         } else {
           evalScore = result.info.score || 0;
         }
-        // Stockfish score is from the side-to-move's perspective after the move
-        // We need to normalize to always be from White's perspective
-        // After move i, it's the opponent's turn to move
-        // The state stored at history[i].state is BEFORE the move (the mover's turn)
-        // So the FEN we evaluated is from the perspective of the player who DIDN'T just move
-        const moverColor = history[i].state.turn; // who made move i
+        const moverColor = history[i].state.turn;
         if (moverColor === Chess.WHITE) {
-          // After white moved, it's black's turn, Stockfish gives score for black
           evalScore = -evalScore;
         }
-        // Now evalScore is from White's perspective
       }
 
-      // Classify the move by comparing eval before and after
       const evalDelta = evalScore - prevEval;
       const moverColor = history[i].state.turn;
-      // If white moved and eval went down, it's bad for white. If black moved and eval went up, it's bad for black.
-      const isGoodForMover = moverColor === Chess.WHITE ? evalDelta >= 0 : evalDelta <= 0;
       const absLoss = moverColor === Chess.WHITE ? -evalDelta : evalDelta;
 
       let classification;
       if (absLoss <= -0.5) {
-        classification = 'brilliant'; // significantly improved position beyond expectation
+        classification = 'brilliant';
       } else if (absLoss <= 0) {
         classification = 'best';
       } else if (absLoss < 0.2) {
@@ -854,7 +1266,6 @@
       showEvalBar(evalScore);
     }
 
-    // Restore engine difficulty after analysis
     if (engineReady) {
       Engine.setDifficulty(getDifficulty());
     }
@@ -865,14 +1276,13 @@
     $analysisProgress.classList.remove('visible');
 
     renderAnalysisSummary();
-    renderMoveList(); // re-render with annotations
-    render(); // re-render board with markers
+    renderMoveList();
+    render();
   }
 
   function renderAnalysisSummary() {
     if (analysisResults.length === 0) return;
 
-    // Count classifications per side
     const counts = {
       w: { brilliant: 0, best: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 },
       b: { brilliant: 0, best: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 },
@@ -884,7 +1294,6 @@
       if (counts[color][cls] !== undefined) counts[color][cls]++;
     }
 
-    // Calculate accuracy (simplified: % of moves that are best/good/brilliant)
     const wTotal = Object.values(counts.w).reduce((a, b) => a + b, 0);
     const bTotal = Object.values(counts.b).reduce((a, b) => a + b, 0);
     const wGood = counts.w.brilliant + counts.w.best + counts.w.good;
@@ -919,6 +1328,239 @@
     $analysisSummary.classList.add('visible');
   }
 
+  // ===================== TUTORIAL SYSTEM =====================
+
+  function renderTutorialBrowser() {
+    $tutorialBrowser.classList.remove('hidden');
+    $tutorialLesson.classList.add('hidden');
+    $tutorialCategories.innerHTML = '';
+
+    const categories = Tutorials.getCategories();
+    for (const catName in categories) {
+      const section = document.createElement('div');
+      section.className = 'tutorial-category';
+
+      const title = document.createElement('div');
+      title.className = 'tutorial-category-title';
+      title.textContent = catName;
+      section.appendChild(title);
+
+      const grid = document.createElement('div');
+      grid.className = 'tutorial-lesson-grid';
+
+      for (const lesson of categories[catName]) {
+        const card = document.createElement('div');
+        card.className = 'tutorial-lesson-card';
+        card.addEventListener('click', () => openLesson(lesson.id));
+
+        const header = document.createElement('div');
+        header.className = 'tutorial-card-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'tutorial-card-icon';
+        icon.textContent = lesson.icon;
+        header.appendChild(icon);
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'tutorial-card-title';
+        titleSpan.textContent = lesson.title;
+        header.appendChild(titleSpan);
+
+        card.appendChild(header);
+
+        const desc = document.createElement('div');
+        desc.className = 'tutorial-card-desc';
+        desc.textContent = lesson.description;
+        card.appendChild(desc);
+
+        const meta = document.createElement('div');
+        meta.className = 'tutorial-card-meta';
+        const puzzleCount = lesson.steps.filter(s => s.type === 'puzzle').length;
+        const explainCount = lesson.steps.filter(s => s.type === 'explain').length;
+        meta.textContent = explainCount + ' explanation' + (explainCount !== 1 ? 's' : '') +
+          ', ' + puzzleCount + ' puzzle' + (puzzleCount !== 1 ? 's' : '');
+        card.appendChild(meta);
+
+        grid.appendChild(card);
+      }
+
+      section.appendChild(grid);
+      $tutorialCategories.appendChild(section);
+    }
+  }
+
+  function openLesson(lessonId) {
+    tutorialLesson = Tutorials.getLessonById(lessonId);
+    if (!tutorialLesson) return;
+
+    tutorialStepIdx = 0;
+    $tutorialBrowser.classList.add('hidden');
+    $tutorialLesson.classList.remove('hidden');
+    $tutorialLessonTitle.textContent = tutorialLesson.icon + ' ' + tutorialLesson.title;
+
+    renderTutorialStep();
+  }
+
+  function renderTutorialStep() {
+    if (!tutorialLesson) return;
+    const step = tutorialLesson.steps[tutorialStepIdx];
+    if (!step) return;
+
+    tutorialPuzzleSolved = false;
+    tutorialSelected = -1;
+    tutorialHighlights = [];
+
+    // Step counter
+    $tutorialStepCounter.textContent = 'Step ' + (tutorialStepIdx + 1) + ' / ' + tutorialLesson.steps.length;
+
+    // Navigation buttons
+    $btnTutorialPrev.disabled = tutorialStepIdx === 0;
+    $btnTutorialNext.textContent = tutorialStepIdx === tutorialLesson.steps.length - 1 ? 'Finish' : 'Next →';
+
+    // Text content
+    $tutorialText.textContent = step.text;
+
+    // Hide hint/feedback
+    $tutorialHint.classList.add('hidden');
+    $tutorialFeedback.classList.add('hidden');
+
+    // Show hint button for puzzle steps
+    if (step.type === 'puzzle') {
+      $btnTutorialHint.classList.remove('hidden');
+      $btnTutorialNext.disabled = true; // must solve puzzle first
+    } else {
+      $btnTutorialHint.classList.add('hidden');
+      $btnTutorialNext.disabled = false;
+    }
+
+    // Set up the board from FEN
+    if (step.fen) {
+      tutorialGameState = Chess.parseFEN(step.fen);
+    }
+
+    renderTutorialBoard(step);
+  }
+
+  function renderTutorialBoard(step) {
+    if (!tutorialGameState) return;
+    const squares = $tutorialBoard.children;
+    const highlightSquares = (step.highlights || []).map(sq => Chess.fromAlg(sq));
+
+    clearArrows($tutorialArrowSvg);
+
+    for (let i = 0; i < 64; i++) {
+      const dispSq = i; // tutorial board is not flipped (always White perspective)
+      const r = Chess.row(dispSq), c = Chess.col(dispSq);
+      const isLight = (r + c) % 2 === 0;
+      const piece = tutorialGameState.board[dispSq];
+      const sq = squares[i];
+
+      let cls = 'square ' + (isLight ? 'light' : 'dark');
+      if (highlightSquares.includes(dispSq)) cls += ' tutorial-highlight';
+      if (dispSq === tutorialSelected) cls += ' selected';
+
+      // Show move indicators for puzzle interaction
+      if (tutorialSelected >= 0 && tutorialHighlights.includes(dispSq)) {
+        cls += ' tutorial-target';
+      }
+
+      sq.className = cls;
+      sq.dataset.sq = dispSq;
+
+      let html = '';
+      if (piece) {
+        const pieceClass = piece.color === 'w' ? 'white-piece' : 'black-piece';
+        html += '<span class="piece ' + pieceClass + '">' + Chess.PIECE_UNICODE[piece.color + piece.type] + '</span>';
+      }
+
+      // Move indicators for puzzle
+      if (tutorialSelected >= 0 && tutorialHighlights.includes(dispSq)) {
+        if (tutorialGameState.board[dispSq] != null) {
+          html += '<div class="capture-ring"></div>';
+        } else {
+          html += '<div class="move-dot"></div>';
+        }
+      }
+
+      sq.innerHTML = html;
+    }
+
+    // Draw arrows if step has them
+    if (step.arrows) {
+      for (const [from, to] of step.arrows) {
+        drawArrow($tutorialArrowSvg, from, to, 'tutorial-arrow', false, 'arrowhead-tutorial');
+      }
+    }
+  }
+
+  function onTutorialBoardClick(e) {
+    if (!tutorialLesson) return;
+    const step = tutorialLesson.steps[tutorialStepIdx];
+    if (!step || step.type !== 'puzzle' || tutorialPuzzleSolved) return;
+
+    const target = e.target.closest('.square');
+    if (!target) return;
+    const sq = parseInt(target.dataset.sq);
+
+    // If we have a selected piece and clicked a target, try the move
+    if (tutorialSelected >= 0 && tutorialHighlights.includes(sq)) {
+      const moveUCI = Chess.toAlg(tutorialSelected) + Chess.toAlg(sq);
+      checkTutorialPuzzleAnswer(moveUCI, tutorialSelected, sq);
+      return;
+    }
+
+    // Select a piece
+    const piece = tutorialGameState.board[sq];
+    if (piece && piece.color === tutorialGameState.turn) {
+      tutorialSelected = sq;
+      tutorialHighlights = Chess.legalMovesFrom(tutorialGameState, sq).map(m => m.to);
+      renderTutorialBoard(step);
+    } else {
+      tutorialSelected = -1;
+      tutorialHighlights = [];
+      renderTutorialBoard(step);
+    }
+  }
+
+  function checkTutorialPuzzleAnswer(moveUCI, from, to) {
+    const step = tutorialLesson.steps[tutorialStepIdx];
+    if (!step || !step.solution) return;
+
+    if (step.solution.includes(moveUCI)) {
+      // Correct!
+      tutorialPuzzleSolved = true;
+      $tutorialFeedback.classList.remove('hidden', 'incorrect');
+      $tutorialFeedback.classList.add('correct');
+      $tutorialFeedback.textContent = 'Correct! Well done!';
+      $btnTutorialNext.disabled = false;
+      $btnTutorialHint.classList.add('hidden');
+
+      // Execute the move on the tutorial board
+      const result = Chess.makeMove(tutorialGameState, from, to, null);
+      if (result) {
+        tutorialGameState = result.state;
+      }
+      tutorialSelected = -1;
+      tutorialHighlights = [];
+      renderTutorialBoard(step);
+    } else {
+      // Wrong move
+      $tutorialFeedback.classList.remove('hidden', 'correct');
+      $tutorialFeedback.classList.add('incorrect');
+      $tutorialFeedback.textContent = 'Not quite — try again!';
+      tutorialSelected = -1;
+      tutorialHighlights = [];
+      renderTutorialBoard(step);
+    }
+  }
+
+  function showTutorialHint() {
+    const step = tutorialLesson.steps[tutorialStepIdx];
+    if (!step || !step.hint) return;
+    $tutorialHint.classList.remove('hidden');
+    $tutorialHint.textContent = step.hint;
+  }
+
   // ===================== CONTROLS =====================
 
   function bindControls() {
@@ -926,6 +1568,7 @@
     $btnUndo.addEventListener('click', undo);
     $btnFlip.addEventListener('click', () => {
       flipped = !flipped;
+      clearArrows($arrowSvg);
       render();
     });
     $btnPlayAgain.addEventListener('click', newGame);
@@ -933,7 +1576,16 @@
       if (engineReady) Engine.setDifficulty(getDifficulty());
     });
 
-    // Color chooser (vs-engine mode)
+    // Hint
+    $btnHint.addEventListener('click', showHint);
+
+    // Coach toggle
+    $coachToggle.addEventListener('change', () => {
+      coachEnabled = $coachToggle.checked;
+      $coachContent.classList.toggle('collapsed', !coachEnabled);
+    });
+
+    // Color chooser
     $btnWhite.addEventListener('click', () => {
       if (playerColor === Chess.WHITE) return;
       playerColor = Chess.WHITE;
@@ -954,18 +1606,12 @@
 
     // Handoff controls
     $btnHandoffWhite.addEventListener('click', () => {
-      if (handoffColor === Chess.WHITE) {
-        stopHandoff();
-      } else {
-        startHandoff(Chess.WHITE);
-      }
+      if (handoffColor === Chess.WHITE) stopHandoff();
+      else startHandoff(Chess.WHITE);
     });
     $btnHandoffBlack.addEventListener('click', () => {
-      if (handoffColor === Chess.BLACK) {
-        stopHandoff();
-      } else {
-        startHandoff(Chess.BLACK);
-      }
+      if (handoffColor === Chess.BLACK) stopHandoff();
+      else startHandoff(Chess.BLACK);
     });
     $btnHandoffStop.addEventListener('click', stopHandoff);
 
@@ -975,11 +1621,36 @@
       runAnalysis();
     });
 
+    // Tutorial controls
+    $btnTutorialBack.addEventListener('click', () => {
+      tutorialLesson = null;
+      renderTutorialBrowser();
+    });
+    $btnTutorialPrev.addEventListener('click', () => {
+      if (tutorialStepIdx > 0) {
+        tutorialStepIdx--;
+        renderTutorialStep();
+      }
+    });
+    $btnTutorialNext.addEventListener('click', () => {
+      if (!tutorialLesson) return;
+      if (tutorialStepIdx < tutorialLesson.steps.length - 1) {
+        tutorialStepIdx++;
+        renderTutorialStep();
+      } else {
+        // Finished lesson — go back to browser
+        tutorialLesson = null;
+        renderTutorialBrowser();
+      }
+    });
+    $btnTutorialHint.addEventListener('click', showTutorialHint);
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
       if (e.key === 'n' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); newGame(); }
-      if (e.key === 'f' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flipped = !flipped; render(); }
+      if (e.key === 'f' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flipped = !flipped; clearArrows($arrowSvg); render(); }
+      if (e.key === 'h' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); showHint(); }
     });
   }
 

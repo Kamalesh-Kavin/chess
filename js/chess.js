@@ -456,7 +456,7 @@ const Chess = (function () {
   return {
     create, toFEN, parseFEN, cloneState,
     legalMoves, legalMovesFrom, isLegal, makeMove,
-    getStatus, isInCheck, findKing,
+    getStatus, isInCheck, isAttackedBy, findKing,
     toSAN, toUCI, toAlg, fromAlg,
     sq, row, col,
     PIECE_UNICODE, PIECE_VALUES,

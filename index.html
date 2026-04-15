@@ -14,6 +14,7 @@
         <div id="mode-selector">
           <button class="mode-btn active" data-mode="vs-engine">vs Engine</button>
           <button class="mode-btn" data-mode="handoff">Handoff</button>
+          <button class="mode-btn" data-mode="learn">Learn</button>
         </div>
         <div id="color-chooser">
           <button id="btn-white" class="color-btn active" title="Play as White">&#9812;</button>
@@ -28,9 +29,11 @@
         <button id="btn-new" title="New Game">New</button>
         <button id="btn-undo" title="Undo Move">Undo</button>
         <button id="btn-flip" title="Flip Board">Flip</button>
+        <button id="btn-hint" class="hint-btn" title="Get a hint">Hint</button>
       </div>
     </div>
 
+    <!-- ══════════ GAME VIEW ══════════ -->
     <div id="game-layout">
       <div id="game-area">
         <div id="opponent-info" class="player-info">
@@ -40,6 +43,8 @@
 
         <div id="board-container">
           <div id="board"></div>
+          <!-- SVG overlay for hint arrows -->
+          <svg id="arrow-svg" class="arrow-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
         </div>
 
         <div id="player-info" class="player-info">
@@ -51,6 +56,63 @@
       <div id="sidebar">
         <div id="status"></div>
 
+        <!-- ── Coach Panel (feedback on your last move) ── -->
+        <div id="coach-panel">
+          <div class="coach-header">
+            <span class="coach-title">Move Coach</span>
+            <label class="toggle-label">
+              <input type="checkbox" id="coach-toggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div id="coach-content" class="coach-content">
+            <div id="coach-message" class="coach-message">
+              <div class="coach-icon" id="coach-icon"></div>
+              <div class="coach-text">
+                <div class="coach-title-text" id="coach-title-text">Play a move to get feedback</div>
+                <div class="coach-detail" id="coach-detail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Suggestion Panel (best move for current position) ── -->
+        <div id="suggestion-panel" class="hidden">
+          <div class="suggestion-header">
+            <span class="suggestion-title">Suggestion</span>
+          </div>
+          <div class="suggestion-body">
+            <div id="suggestion-move" class="suggestion-move"></div>
+            <div id="suggestion-reason" class="suggestion-reason"></div>
+          </div>
+        </div>
+
+        <!-- ── Engine Thinking Panel ── -->
+        <div id="thinking-panel" class="hidden">
+          <div class="thinking-header">
+            <span class="thinking-title">Stockfish Thinking</span>
+          </div>
+          <div class="thinking-body">
+            <div class="thinking-row">
+              <span class="thinking-label">Eval</span>
+              <span id="thinking-eval" class="thinking-value">0.0</span>
+            </div>
+            <div class="thinking-row">
+              <span class="thinking-label">Depth</span>
+              <span id="thinking-depth" class="thinking-value">-</span>
+            </div>
+            <div class="thinking-row">
+              <span class="thinking-label">Best line</span>
+              <span id="thinking-pv" class="thinking-value thinking-pv">-</span>
+            </div>
+            <div class="thinking-row">
+              <span class="thinking-label">Speed</span>
+              <span id="thinking-nps" class="thinking-value">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Handoff Controls ── -->
         <div id="handoff-controls">
           <span class="handoff-label">Stockfish Control</span>
           <div class="handoff-row">
@@ -61,6 +123,7 @@
           <div class="handoff-status" id="handoff-status"></div>
         </div>
 
+        <!-- ── Analysis Panel ── -->
         <div id="analysis-panel">
           <div class="analysis-header">
             <span class="analysis-title">Game Analysis</span>
@@ -82,8 +145,48 @@
         <div id="move-list"></div>
       </div>
     </div>
+
+    <!-- ══════════ TUTORIAL VIEW ══════════ -->
+    <div id="tutorial-layout" class="hidden">
+      <!-- Lesson browser -->
+      <div id="tutorial-browser">
+        <div class="tutorial-browser-header">
+          <h2>Learn Chess</h2>
+          <p class="tutorial-subtitle">Interactive lessons to improve your game</p>
+        </div>
+        <div id="tutorial-categories"></div>
+      </div>
+
+      <!-- Active lesson view -->
+      <div id="tutorial-lesson" class="hidden">
+        <div id="tutorial-lesson-header">
+          <button id="btn-tutorial-back" class="tutorial-back-btn">&larr; All Lessons</button>
+          <h3 id="tutorial-lesson-title"></h3>
+          <span id="tutorial-step-counter" class="tutorial-step-counter"></span>
+        </div>
+        <div id="tutorial-content">
+          <div id="tutorial-board-area">
+            <div id="tutorial-board-container">
+              <div id="tutorial-board" class="tutorial-board"></div>
+              <svg id="tutorial-arrow-svg" class="arrow-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+            </div>
+          </div>
+          <div id="tutorial-text-area">
+            <div id="tutorial-text" class="tutorial-text"></div>
+            <div id="tutorial-hint" class="tutorial-hint hidden"></div>
+            <div id="tutorial-feedback" class="tutorial-feedback hidden"></div>
+            <div class="tutorial-nav">
+              <button id="btn-tutorial-prev" class="tutorial-nav-btn" disabled>&larr; Previous</button>
+              <button id="btn-tutorial-hint" class="tutorial-hint-btn hidden">Show Hint</button>
+              <button id="btn-tutorial-next" class="tutorial-nav-btn">Next &rarr;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
+  <!-- ══════════ MODALS ══════════ -->
   <div id="promotion-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-title">Promote pawn to:</div>
@@ -105,6 +208,7 @@
 
   <script src="js/chess.js"></script>
   <script src="js/engine.js"></script>
+  <script src="js/tutorials.js"></script>
   <script src="js/ui.js"></script>
 </body>
 </html>

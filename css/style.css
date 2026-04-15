@@ -344,6 +344,27 @@ html, body {
   pointer-events: none;
 }
 
+/* Best-move suggestion dots (blue, from coach/hint) */
+.square .suggest-dot {
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: rgba(88, 166, 255, 0.55);
+  pointer-events: none;
+  box-shadow: 0 0 6px rgba(88, 166, 255, 0.4);
+}
+
+.square .suggest-ring {
+  position: absolute;
+  width: 85%;
+  height: 85%;
+  border-radius: 50%;
+  border: 4px solid rgba(88, 166, 255, 0.55);
+  pointer-events: none;
+  box-shadow: 0 0 6px rgba(88, 166, 255, 0.3);
+}
+
 /* Piece styling */
 .piece {
   pointer-events: none;
@@ -819,6 +840,639 @@ html, body {
 #move-list::-webkit-scrollbar-track { background: transparent; }
 #move-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+/* ===================== HINT BUTTON ===================== */
+.hint-btn {
+  background: var(--bg-card) !important;
+  color: var(--accent) !important;
+  border: 1px solid var(--accent) !important;
+  font-weight: 600 !important;
+  position: relative;
+}
+
+.hint-btn:hover {
+  background: var(--accent) !important;
+  color: #000 !important;
+}
+
+.hint-btn:disabled {
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+}
+
+/* ===================== ARROW SVG OVERLAY ===================== */
+.arrow-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Hint / best-move arrow — blue, single arrow */
+.arrow-overlay .hint-arrow {
+  fill: none;
+  stroke: rgba(88, 166, 255, 0.6);
+  stroke-width: 5;
+  stroke-linecap: round;
+  marker-end: url(#arrowhead);
+}
+
+.arrow-overlay .tutorial-arrow {
+  fill: none;
+  stroke: rgba(255, 170, 50, 0.6);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  marker-end: url(#arrowhead-tutorial);
+}
+
+/* ===================== COACH PANEL ===================== */
+#coach-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.coach-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.coach-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+/* Toggle switch */
+.toggle-label {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.toggle-label input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  transition: background 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-label input:checked + .toggle-slider {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-label input:checked + .toggle-slider::before {
+  transform: translateX(14px);
+  background: #fff;
+}
+
+/* Coach content */
+.coach-content {
+  padding: 10px 12px;
+  transition: max-height 0.3s, opacity 0.3s;
+}
+
+.coach-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+.coach-message {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.coach-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.coach-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.coach-title-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.coach-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Coach best move callout — REMOVED, replaced by suggestion panel */
+
+/* ===================== SUGGESTION PANEL ===================== */
+#suggestion-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+#suggestion-panel.hidden { display: none; }
+
+.suggestion-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(88, 166, 255, 0.08);
+}
+
+.suggestion-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+.suggestion-body {
+  padding: 8px 12px;
+}
+
+.suggestion-move {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.suggestion-reason {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Coach classification colors */
+.coach-icon.brilliant { background: var(--brilliant); color: #fff; }
+.coach-icon.best { background: var(--best); color: #fff; }
+.coach-icon.good { background: var(--good); color: #fff; }
+.coach-icon.inaccuracy { background: var(--inaccuracy); color: #000; }
+.coach-icon.mistake { background: var(--mistake); color: #fff; }
+.coach-icon.blunder { background: var(--blunder); color: #fff; }
+.coach-icon.engine-info { background: var(--accent); color: #fff; }
+
+/* ===================== ENGINE THINKING PANEL ===================== */
+#thinking-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+
+#thinking-panel.hidden {
+  display: none;
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.thinking-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.thinking-body {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.thinking-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.thinking-label {
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.thinking-value {
+  color: var(--text);
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.thinking-pv {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Pulsing dot for active thinking */
+.thinking-header::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-right: 8px;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* ===================== TUTORIAL LAYOUT ===================== */
+#tutorial-layout {
+  width: 100%;
+  max-width: 960px;
+  flex: 1;
+  min-height: 0;
+}
+
+#tutorial-layout.hidden {
+  display: none;
+}
+
+/* ── Tutorial Browser ── */
+#tutorial-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#tutorial-browser.hidden {
+  display: none;
+}
+
+.tutorial-browser-header {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.tutorial-browser-header h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
+
+.tutorial-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Category sections */
+.tutorial-category {
+  margin-bottom: 8px;
+}
+
+.tutorial-category-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tutorial-lesson-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+/* Lesson cards */
+.tutorial-lesson-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tutorial-lesson-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.tutorial-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tutorial-card-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.tutorial-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tutorial-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tutorial-card-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: auto;
+}
+
+/* ── Tutorial Lesson View ── */
+#tutorial-lesson {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#tutorial-lesson.hidden {
+  display: none;
+}
+
+#tutorial-lesson-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tutorial-back-btn {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.tutorial-back-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text);
+  border-color: var(--border-light);
+}
+
+#tutorial-lesson-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+
+.tutorial-step-counter {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Tutorial content: board + text side by side */
+#tutorial-content {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* Tutorial board area */
+#tutorial-board-area {
+  flex-shrink: 0;
+}
+
+#tutorial-board-container {
+  position: relative;
+  width: var(--board-size);
+  max-width: 420px;
+}
+
+#tutorial-board {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 2px var(--border),
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#tutorial-board .square {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-size: calc(var(--board-size) / 8 * 0.8);
+  max-font-size: 42px;
+}
+
+/* Tutorial text area */
+#tutorial-text-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 220px;
+  max-width: 380px;
+}
+
+.tutorial-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* Tutorial hint box */
+.tutorial-hint {
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.25);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--accent);
+  line-height: 1.4;
+}
+
+.tutorial-hint.hidden { display: none; }
+
+.tutorial-hint::before {
+  content: '💡 ';
+}
+
+/* Tutorial feedback */
+.tutorial-feedback {
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.tutorial-feedback.hidden { display: none; }
+
+.tutorial-feedback.correct {
+  background: rgba(63, 185, 80, 0.1);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+  color: var(--green);
+}
+
+.tutorial-feedback.incorrect {
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  color: var(--red);
+}
+
+/* Tutorial navigation */
+.tutorial-nav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.tutorial-nav-btn {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tutorial-nav-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--border-light);
+}
+
+.tutorial-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.tutorial-hint-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: auto;
+}
+
+.tutorial-hint-btn:hover {
+  background: var(--accent);
+  color: #000;
+}
+
+.tutorial-hint-btn.hidden { display: none; }
+
+/* Highlight squares in tutorial */
+#tutorial-board .square.tutorial-highlight {
+  box-shadow: inset 0 0 0 3px rgba(88, 166, 255, 0.6);
+}
+
+#tutorial-board .square.tutorial-target {
+  box-shadow: inset 0 0 0 3px rgba(63, 185, 80, 0.6);
+}
+
 /* ===================== RESPONSIVE ===================== */
 @media (max-width: 800px) {
   #game-layout {
@@ -831,6 +1485,17 @@ html, body {
     flex: 0 0 auto;
     max-height: 200px;
   }
+  #tutorial-content {
+    flex-direction: column;
+    align-items: center;
+  }
+  #tutorial-text-area {
+    max-width: 100%;
+    width: 100%;
+  }
+  #tutorial-board-container {
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 600px) {
@@ -838,4 +1503,10 @@ html, body {
   #top-bar { flex-direction: column; gap: 8px; align-items: flex-start; }
   #controls { flex-wrap: wrap; }
   .mode-btn { padding: 5px 8px; font-size: 11px; }
+  .tutorial-lesson-grid {
+    grid-template-columns: 1fr;
+  }
+  #tutorial-lesson-title {
+    font-size: 15px;
+  }
 }
